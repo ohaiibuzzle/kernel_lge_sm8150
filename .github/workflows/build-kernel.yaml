@@ -49,11 +49,6 @@ jobs:
           path: |
             toolchain
           key: ${{ runner.os }}-android-toolchain
-  
-      - name: Setup env
-        run: |
-          WORKSPACE=$(pwd)
-          echo "PATH=$WORKSPACE/toolchain/clang/bin:$WORKSPACE/toolchain/gcc64/bin:$WORKSPACE/toolchain/gcc32/bin:$PATH" >> $GITHUB_ENV
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,6 +57,7 @@ jobs:
 
       - name: Build kernel
         run: |
+          export PATH=$(pwd)/toolchain/clang/bin:$(pwd)/toolchain/gcc64/bin:$(pwd)/toolchain/gcc32/bin:$PATH
           cd kernel
           make ARCH=arm64 O=out CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_ARM32=arm-linux-androideabi- CLANG_TRIPLE=aarch64-linux-gnu- vendor/${{ matrix.variants }}_defconfig
           sed -i 's/CONFIG_CC_WERROR=y/CONFIG_CC_WERROR=n/g' out/.config
