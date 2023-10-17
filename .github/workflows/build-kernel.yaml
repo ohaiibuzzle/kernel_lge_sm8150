@@ -1,4 +1,4 @@
-name: "Build LineageOS/android_kernel_xiaomi_sdm845"
+name: "Build mah kernel"
 
 on:
   workflow_dispatch:
