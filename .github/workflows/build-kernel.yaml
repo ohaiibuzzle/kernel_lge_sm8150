@@ -7,7 +7,7 @@ jobs:
   Build:
     strategy:
       matrix:
-        variants: [flashlmdd_lao_com-perf]
+        variants: [aosp_flash]
     runs-on: ubuntu-latest
     steps:
       - name: Setup build env
