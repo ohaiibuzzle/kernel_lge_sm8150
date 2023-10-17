@@ -1,0 +1,81 @@
+name: "Build LineageOS/android_kernel_xiaomi_sdm845"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  Build:
+    strategy:
+      matrix:
+        variants: [flashlmdd_lao_com-perf]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup build env
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison build-essential ccache curl flex \
+          g++-multilib gcc-multilib git gnupg gperf imagemagick lib32ncurses5-dev \
+          lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev \
+          libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc \
+          zip zlib1g-dev python3 python3-pip python3-pexpect python3-setuptools python3-serial python3-yaml \
+          python-is-python3 
+
+      - name: Cache build env
+        id: cache-build-env
+        uses: actions/cache@v3
+        with:
+          path: |
+            toolchain
+          key: ${{ runner.os }}-android-toolchain
+
+      - name: Pull Android toolchain
+        if: steps.cache-build-env.outputs.cache-hit != 'true'
+        run: |
+          mkdir toolchain && cd toolchain
+          wget "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r498229b.tar.gz" -O clang.tar.gz
+          mkdir clang && tar xvf clang.tar.gz -C clang 
+          # gcc 7.2 arm64
+          wget "https://android-review.linaro.org/plugins/gitiles/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-7.2/+archive/refs/heads/master.tar.gz" -O gcc.arm64.tar.gz
+          mkdir gcc64 && tar xvf gcc.arm64.tar.gz -C gcc64
+          # gcc 7.2 arm32
+          wget "https://android-review.linaro.org/plugins/gitiles/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-7.2/+archive/refs/heads/master.tar.gz" -O gcc.arm.tar.gz
+          mkdir gcc32 && tar xvf gcc.arm.tar.gz -C gcc32
+          rm *.tar.gz && cd ..
+
+      - name: Save Android toolchain
+        if: steps.cache-build-env.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v3
+        with:
+          path: |
+            toolchain
+          key: ${{ runner.os }}-android-toolchain
+  
+      - name: Setup env
+        run: |
+          WORKSPACE=$(pwd)
+          echo "PATH=$WORKSPACE/toolchain/clang/bin:$WORKSPACE/toolchain/gcc64/bin:$WORKSPACE/toolchain/gcc32/bin:$PATH" >> $GITHUB_ENV
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: kernel
+
+      - name: Build kernel
+        run: |
+          cd kernel
+          make ARCH=arm64 O=out CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_ARM32=arm-linux-androideabi- CLANG_TRIPLE=aarch64-linux-gnu- vendor/${{ matrix.variants }}_defconfig
+          sed -i 's/CONFIG_CC_WERROR=y/CONFIG_CC_WERROR=n/g' out/.config
+          yes "" | make ARCH=arm64 O=out CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_ARM32=arm-linux-androideabi- CLANG_TRIPLE=aarch64-linux-gnu- oldconfig
+          make -j$(nproc --all) ARCH=arm64 O=out CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_ARM32=arm-linux-androideabi- CLANG_TRIPLE=aarch64-linux-gnu- 2>&1 | tee build.log
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: kernel-${{ matrix.variants }}
+          path: kernel/out/arch/arm64/boot
+
+      - name: Upload build log
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-log-${{ matrix.variants }}
+          path: kernel/build.log
