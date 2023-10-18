@@ -1,6 +1,5 @@
 #include "asm/current.h"
-#include "linux/string.h"
-#include "linux/cred.h"
+#include "linux/compat.h"
 #include "linux/dcache.h"
 #include "linux/err.h"
 #include "linux/fs.h"
@@ -11,12 +10,12 @@
 #include "linux/uaccess.h"
 #include "linux/version.h"
 #include "linux/workqueue.h"
-#include "linux/input.h"
 
 #include "allowlist.h"
 #include "arch.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksud.h"
+#include "kernel_compat.h"
 #include "selinux/selinux.h"
 
 static const char KERNEL_SU_RC[] =
@@ -51,20 +50,20 @@ static struct work_struct stop_vfs_read_work;
 static struct work_struct stop_execve_hook_work;
 static struct work_struct stop_input_hook_work;
 #else
-static bool vfs_read_hook = true;
-static bool execveat_hook = true;
-static bool input_hook = true;
+bool ksu_vfs_read_hook __read_mostly = true;
+bool ksu_execveat_hook __read_mostly = true;
+bool ksu_input_hook __read_mostly = true;
 #endif
 
 void on_post_fs_data(void)
 {
 	static bool done = false;
 	if (done) {
-		pr_info("on_post_fs_data already done");
+		pr_info("on_post_fs_data already done\n");
 		return;
 	}
 	done = true;
-	pr_info("on_post_fs_data!");
+	pr_info("on_post_fs_data!\n");
 	ksu_load_allow_list();
 	// sanity check, this may influence the performance
 	stop_input_hook();
@@ -107,7 +106,13 @@ static const char __user *get_user_arg_ptr(struct user_arg_ptr argv, int nr)
 /*
  * count() counts the number of strings in array ARGV.
  */
-static int count(struct user_arg_ptr argv, int max)
+
+ /*
+ * Make sure old GCC compiler can use __maybe_unused,
+ * Test passed in 4.4.x ~ 4.9.x when use GCC.
+ */
+
+static int __maybe_unused count(struct user_arg_ptr argv, int max)
 {
 	int i = 0;
 
@@ -133,11 +138,12 @@ static int count(struct user_arg_ptr argv, int max)
 	return i;
 }
 
+// the call from execve_handler_pre won't provided correct value for __never_use_argument, use them after fix execve_handler_pre, keeping them for consistence for manually patched code
 int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
-			     void *argv, void *envp, int *flags)
+				struct user_arg_ptr *argv, struct user_arg_ptr *envp, int *__never_use_flags)
 {
 #ifndef CONFIG_KPROBES
-	if (!execveat_hook) {
+	if (!ksu_execveat_hook) {
 		return 0;
 	}
 #endif
@@ -145,7 +151,11 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 
 	static const char app_process[] = "/system/bin/app_process";
 	static bool first_app_process = true;
+
+	/* This applies to versions Android 10+ */
 	static const char system_bin_init[] = "/system/bin/init";
+	/* This applies to versions between Android 6 ~ 9  */
+	static const char old_system_init[] = "/init";
 	static bool init_second_stage_executed = false;
 
 	if (!filename_ptr)
@@ -156,37 +166,84 @@ int ksu_handle_execveat_ksud(int *fd, struct filename **filename_ptr,
 		return 0;
 	}
 
-	if (!memcmp(filename->name, system_bin_init,
-		    sizeof(system_bin_init) - 1)) {
+	if (unlikely(!memcmp(filename->name, system_bin_init, 
+				sizeof(system_bin_init) - 1))) {
 		// /system/bin/init executed
-		struct user_arg_ptr *ptr = (struct user_arg_ptr*) argv;
-		int argc = count(*ptr, MAX_ARG_STRINGS);
+		int argc = count(*argv, MAX_ARG_STRINGS);
 		pr_info("/system/bin/init argc: %d\n", argc);
 		if (argc > 1 && !init_second_stage_executed) {
-			const char __user *p = get_user_arg_ptr(*ptr, 1);
+			const char __user *p = get_user_arg_ptr(*argv, 1);
 			if (p && !IS_ERR(p)) {
 				char first_arg[16];
-				#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
-                                strncpy_from_user_nofault(first_arg, p, sizeof(first_arg));
-                                #elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
-                                strncpy_from_unsafe_user(first_arg, p, sizeof(first_arg));
-                                #else
-                                strncpy_from_user(first_arg, p, sizeof(first_arg));
-                                #endif
-				pr_info("first arg: %s\n", first_arg);
+				ksu_strncpy_from_user_nofault(first_arg, p, sizeof(first_arg));
+				pr_info("/system/bin/init first arg: %s\n", first_arg);
 				if (!strcmp(first_arg, "second_stage")) {
 					pr_info("/system/bin/init second_stage executed\n");
 					apply_kernelsu_rules();
 					init_second_stage_executed = true;
+					ksu_android_ns_fs_check();
 				}
 			} else {
 				pr_err("/system/bin/init parse args err!\n");
 			}
 		}
+	} else if (unlikely(!memcmp(filename->name, old_system_init,
+				sizeof(old_system_init) - 1))) {
+		// /init executed
+		int argc = count(*argv, MAX_ARG_STRINGS);
+		pr_info("/init argc: %d\n", argc);
+		if (argc > 1 && !init_second_stage_executed) {
+			/* This applies to versions between Android 6 ~ 7 */
+			const char __user *p = get_user_arg_ptr(*argv, 1);
+			if (p && !IS_ERR(p)) {
+				char first_arg[16];
+				ksu_strncpy_from_user_nofault(first_arg, p, sizeof(first_arg));
+				pr_info("/init first arg: %s\n", first_arg);
+				if (!strcmp(first_arg, "--second-stage")) {
+					pr_info("/init second_stage executed\n");
+					apply_kernelsu_rules();
+					init_second_stage_executed = true;
+					ksu_android_ns_fs_check();
+				}
+			} else {
+				pr_err("/init parse args err!\n");
+			}
+		} else if (argc == 1 && !init_second_stage_executed) {
+			/* This applies to versions between Android 8 ~ 9  */
+			int envc = count(*envp, MAX_ARG_STRINGS);
+			if (envc > 0) {
+				int n;
+				for (n = 1; n <= envc; n++) {
+					const char __user *p = get_user_arg_ptr(*envp, n);
+					if (!p || IS_ERR(p)) {
+						continue;
+					}
+					char env[256];
+					// Reading environment variable strings from user space
+					if (ksu_strncpy_from_user_nofault(env, p, sizeof(env)) < 0)
+						continue;
+					// Parsing environment variable names and values
+					char *env_name = env;
+					char *env_value = strchr(env, '=');
+					if (env_value == NULL)
+						continue;
+					// Replace equal sign with string terminator
+					*env_value = '\0';
+					env_value++;
+					// Check if the environment variable name and value are matching
+					if (!strcmp(env_name, "INIT_SECOND_STAGE") && (!strcmp(env_value, "1") || !strcmp(env_value, "true"))) {
+						pr_info("/init second_stage executed\n");
+						apply_kernelsu_rules();
+						init_second_stage_executed = true;
+						ksu_android_ns_fs_check();
+					}
+				}
+			}
+		}
 	}
 
-	if (first_app_process &&
-	    !memcmp(filename->name, app_process, sizeof(app_process) - 1)) {
+	if (unlikely(first_app_process &&
+		!memcmp(filename->name, app_process, sizeof(app_process) - 1))) {
 		first_app_process = false;
 		pr_info("exec app_process, /data prepared, second_stage: %d\n", init_second_stage_executed);
 		on_post_fs_data(); // we keep this for old ksud
@@ -207,7 +264,7 @@ static ssize_t read_proxy(struct file *file, char __user *buf, size_t count,
 	bool first_read = file->f_pos == 0;
 	ssize_t ret = orig_read(file, buf, count, pos);
 	if (first_read) {
-		pr_info("read_proxy append %ld + %ld", ret, read_count_append);
+		pr_info("read_proxy append %ld + %ld\n", ret, read_count_append);
 		ret += read_count_append;
 	}
 	return ret;
@@ -218,7 +275,7 @@ static ssize_t read_iter_proxy(struct kiocb *iocb, struct iov_iter *to)
 	bool first_read = iocb->ki_pos == 0;
 	ssize_t ret = orig_read_iter(iocb, to);
 	if (first_read) {
-		pr_info("read_iter_proxy append %ld + %ld", ret,
+		pr_info("read_iter_proxy append %ld + %ld\n", ret,
 			read_count_append);
 		ret += read_count_append;
 	}
@@ -229,7 +286,7 @@ int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
 			size_t *count_ptr, loff_t **pos)
 {
 #ifndef CONFIG_KPROBES
-	if (!vfs_read_hook) {
+	if (!ksu_vfs_read_hook) {
 		return 0;
 	}
 #endif
@@ -287,7 +344,7 @@ int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
 		current->comm, count, rc_count);
 
 	if (count < rc_count) {
-		pr_err("count: %d < rc_count: %d", count, rc_count);
+		pr_err("count: %d < rc_count: %d\n", count, rc_count);
 		return 0;
 	}
 
@@ -330,7 +387,7 @@ int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code,
 				  int *value)
 {
 #ifndef CONFIG_KPROBES
-	if (!input_hook) {
+	if (!ksu_input_hook) {
 		return 0;
 	}
 #endif
@@ -379,11 +436,19 @@ static int execve_handler_pre(struct kprobe *p, struct pt_regs *regs)
 	int *fd = (int *)&PT_REGS_PARM1(regs);
 	struct filename **filename_ptr =
 		(struct filename **)&PT_REGS_PARM2(regs);
-	void *argv = (void *)&PT_REGS_PARM3(regs);
-	void *envp = (void *)&PT_REGS_PARM4(regs);
-	int *flags = (int *)&PT_REGS_PARM5(regs);
+	struct user_arg_ptr argv;
+#ifdef CONFIG_COMPAT
+	argv.is_compat = PT_REGS_PARM3(regs);
+	if (unlikely(argv.is_compat)) {
+		argv.ptr.compat = PT_REGS_CCALL_PARM4(regs);
+	} else {
+		argv.ptr.native = PT_REGS_CCALL_PARM4(regs);
+	}
+#else
+	argv.ptr.native = PT_REGS_PARM3(regs);
+#endif
 
-	return ksu_handle_execveat_ksud(fd, filename_ptr, argv, envp, flags);
+	return ksu_handle_execveat_ksud(fd, filename_ptr, &argv, NULL, NULL);
 }
 
 static int read_handler_pre(struct kprobe *p, struct pt_regs *regs)
@@ -391,7 +456,7 @@ static int read_handler_pre(struct kprobe *p, struct pt_regs *regs)
 	struct file **file_ptr = (struct file **)&PT_REGS_PARM1(regs);
 	char __user **buf_ptr = (char **)&PT_REGS_PARM2(regs);
 	size_t *count_ptr = (size_t *)&PT_REGS_PARM3(regs);
-	loff_t **pos_ptr = (loff_t **)&PT_REGS_PARM4(regs);
+	loff_t **pos_ptr = (loff_t **)&PT_REGS_CCALL_PARM4(regs);
 
 	return ksu_handle_vfs_read(file_ptr, buf_ptr, count_ptr, pos_ptr);
 }
@@ -401,7 +466,7 @@ static int input_handle_event_handler_pre(struct kprobe *p,
 {
 	unsigned int *type = (unsigned int *)&PT_REGS_PARM2(regs);
 	unsigned int *code = (unsigned int *)&PT_REGS_PARM3(regs);
-	int *value = (int *)&PT_REGS_PARM4(regs);
+	int *value = (int *)&PT_REGS_CCALL_PARM4(regs);
 	return ksu_handle_input_handle_event(type, code, value);
 }
 
@@ -448,7 +513,8 @@ static void stop_vfs_read_hook()
 	bool ret = schedule_work(&stop_vfs_read_work);
 	pr_info("unregister vfs_read kprobe: %d!\n", ret);
 #else
-	vfs_read_hook = false;
+	ksu_vfs_read_hook = false;
+	pr_info("stop vfs_read_hook\n");
 #endif
 }
 
@@ -458,7 +524,8 @@ static void stop_execve_hook()
 	bool ret = schedule_work(&stop_execve_hook_work);
 	pr_info("unregister execve kprobe: %d!\n", ret);
 #else
-	execveat_hook = false;
+	ksu_execveat_hook = false;
+	pr_info("stop execve_hook\n");
 #endif
 }
 
@@ -473,7 +540,8 @@ static void stop_input_hook()
 	bool ret = schedule_work(&stop_input_hook_work);
 	pr_info("unregister input kprobe: %d!\n", ret);
 #else
-	input_hook = false;
+	ksu_input_hook = false;
+	pr_info("stop input_hook\n");
 #endif
 }
 

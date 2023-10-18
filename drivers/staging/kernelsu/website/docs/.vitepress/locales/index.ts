@@ -4,6 +4,9 @@ import zh_CN from './zh_CN'
 import zh_TW from './zh_TW'
 import vi_VN from './vi_VN'
 import id_ID from './id_ID'
+import ja_JP from './ja_JP'
+import ru_RU from './ru_RU'
+import pt_BR from './pt_BR'
 
 export default defineConfig({
   locales: {
@@ -25,6 +28,12 @@ export default defineConfig({
       themeConfig: zh_TW.themeConfig,
       description: zh_TW.description
     },
+    ja_JP: {
+      label: '日本語',
+      lang: ja_JP.lang,
+      themeConfig: ja_JP.themeConfig,
+      description: ja_JP.description
+    },
     vi_VN: {
       label: 'Tiếng Việt',
       lang: vi_VN.lang,
@@ -36,6 +45,18 @@ export default defineConfig({
       lang: id_ID.lang,
       themeConfig: id_ID.themeConfig,
       description: id_ID.description
+    },
+    ru_RU: {
+      label: 'Русский',
+      lang: ru_RU.lang,
+      themeConfig: ru_RU.themeConfig,
+      description: ru_RU.description
+    },
+    pt_BR: {
+      label: 'Português (Brasil)',
+      lang: pt_BR.lang,
+      themeConfig: pt_BR.themeConfig,
+      description: pt_BR.description
     }
   }
 })

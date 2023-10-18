@@ -8,7 +8,7 @@
 - 模块安装目录: 都在 `/data/adb/modules`
 - systemless: 都支持通过模块的形式以 systemless 修改 /system
 - `post-fs-data.sh`: 执行时机完全一致，语义也完全一致
-- `service.sh`: 执行世纪完全一致，语义也完全一致
+- `service.sh`: 执行时机完全一致，语义也完全一致
 - `system.prop`: 完全相同
 - `sepolicy.rule`: 完全相同
 - BusyBox：脚本都在 BusyBox 中以“独立模式”运行
@@ -24,3 +24,5 @@
 3. KernelSU 模块替换或者删除文件与 Magisk 完全不同。KernelSU 不支持 `.replace` 方式，相反，你需要通过 `mknod filename c 0 0` 创建同名文件夹来删除对应文件。
 4. BusyBox 的目录不同；KernelSU 内置的 BusyBox 在 `/data/adb/ksu/bin/busybox` 而 Magisk 在 `/data/adb/magisk/busybox`；**注意此为 KernelSU 内部行为，未来可能会更改！**
 5. KernelSU 不支持 `.replace` 文件；但 KernelSU 支持 `REPLACE` 和 `REMOVE` 变量。
+6. KernelSU 新增了一种脚本 `boot-completed.sh`，以便在 Android 系统启动后运行某些任务。
+7. KernelSU 新增了一种脚本 `post-mount.sh`，以便在 Overlayfs 挂载后运行某些任务。
