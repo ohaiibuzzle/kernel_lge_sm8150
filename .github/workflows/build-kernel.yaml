@@ -31,23 +31,16 @@ jobs:
       - name: Pull Android toolchain
         if: steps.cache-build-env.outputs.cache-hit != 'true'
         run: |
-          mkdir toolchain && cd toolchain
-          wget "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r498229b.tar.gz" -O clang.tar.gz
-          mkdir clang && tar xvf clang.tar.gz -C clang 
-          # gcc 7.2 arm64
-          wget "https://android-review.linaro.org/plugins/gitiles/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-7.2/+archive/refs/heads/master.tar.gz" -O gcc.arm64.tar.gz
-          mkdir gcc64 && tar xvf gcc.arm64.tar.gz -C gcc64
-          # gcc 7.2 arm32
-          wget "https://android-review.linaro.org/plugins/gitiles/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-7.2/+archive/refs/heads/master.tar.gz" -O gcc.arm.tar.gz
-          mkdir gcc32 && tar xvf gcc.arm.tar.gz -C gcc32
-          rm *.tar.gz && cd ..
+          wget "$(curl -s https://raw.githubusercontent.com/XSans0/WeebX-Clang/main/main/link.txt)" -O "weebx-clang.tar.gz"
+          mkdir clang && tar -xf weebx-clang -C clang && rm -rf weebx-clang.tar.gz
+          echo "PATH=$(pwd)/clang/bin:$(pwd)/clang/aarch64-linux-gnu/bin:$(pwd)/clang/arm-linux-gnueabi/bin:$PATH" >> "$GITHUB_ENV"
 
       - name: Save Android toolchain
         if: steps.cache-build-env.outputs.cache-hit != 'true'
         uses: actions/cache/save@v3
         with:
           path: |
-            toolchain
+            clang
           key: ${{ runner.os }}-android-toolchain
 
       - name: Checkout
@@ -57,12 +50,11 @@ jobs:
 
       - name: Build kernel
         run: |
-          export PATH=$(pwd)/toolchain/clang/bin:$(pwd)/toolchain/gcc64/bin:$(pwd)/toolchain/gcc32/bin:$PATH
           cd kernel
-          make ARCH=arm64 O=out CC=clang CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_ARM32=arm-linux-androideabi- CLANG_TRIPLE=aarch64-linux-gnu- vendor/${{ matrix.variants }}_defconfig
+          make ARCH=arm64 O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- vendor/${{ matrix.variants }}_defconfig
           sed -i 's/CONFIG_CC_WERROR=y/CONFIG_CC_WERROR=n/g' out/.config
-          yes "" | make ARCH=arm64 O=out CC=clang CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_ARM32=arm-linux-androideabi- CLANG_TRIPLE=aarch64-linux-gnu- oldconfig
-          make -j$(nproc --all) ARCH=arm64 O=out CC=clang CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_ARM32=arm-linux-androideabi- CLANG_TRIPLE=aarch64-linux-gnu- 2>&1 | tee build.log
+          yes "" | make ARCH=arm64 O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- oldconfig
+          make -j$(nproc --all) ARCH=arm64 O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- 2>&1 | tee build.log
       
       - name: Upload build artifacts
         uses: actions/upload-artifact@v3
