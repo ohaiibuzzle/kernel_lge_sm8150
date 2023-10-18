@@ -75,3 +75,6 @@ jobs:
         with:
           name: build-log-${{ matrix.variants }}
           path: kernel/build.log
+          
+      - name: Setup tmate session for debugging
+        uses: mxschmitt/action-tmate@v3
