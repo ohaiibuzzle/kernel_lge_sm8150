@@ -2407,9 +2407,11 @@ static int sony_check_add(struct sony_sc *sc)
 		 * retrieved with feature report 0x81. The address begins at
 		 * offset 1.
 		 */
-		ret = hid_hw_raw_request(sc->hdev, 0x81, buf,
-				DS4_FEATURE_REPORT_0x81_SIZE, HID_FEATURE_REPORT,
-				HID_REQ_GET_REPORT);
+		// ret = hid_hw_raw_request(sc->hdev, 0x81, buf,
+		// 		DS4_FEATURE_REPORT_0x81_SIZE, HID_FEATURE_REPORT,
+		// 		HID_REQ_GET_REPORT);
+		
+		ret = DS4_FEATURE_REPORT_0x81_SIZE;
 
 		if (ret != DS4_FEATURE_REPORT_0x81_SIZE) {
 			hid_err(sc->hdev, "failed to retrieve feature report 0x81 with the DualShock 4 MAC address\n");
