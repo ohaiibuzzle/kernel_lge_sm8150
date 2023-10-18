@@ -46,6 +46,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: kernel
+          submodules: true
 
       - name: Build kernel
         run: |
