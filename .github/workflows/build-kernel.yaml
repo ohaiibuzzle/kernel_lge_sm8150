@@ -32,7 +32,7 @@ jobs:
         if: steps.cache-build-env.outputs.cache-hit != 'true'
         run: |
           wget -q "https://gitlab.com/XSans0/weebx-clang/-/archive/release/15-gr/weebx-clang-release-15-gr.tar.gz" -O "weebx-clang.tar.gz"
-          mkdir clang && tar -xf weebx-clang.tar.gz -C clang && rm -rf weebx-clang.tar.gz
+          mkdir clang && tar -xf weebx-clang.tar.gz -C clang --strip-components=1 && rm -rf weebx-clang.tar.gz
 
       - name: Save Android toolchain
         if: steps.cache-build-env.outputs.cache-hit != 'true'
