@@ -5,9 +5,6 @@ on:
 
 jobs:
   Build:
-    strategy:
-      matrix:
-        variants: [aosp_flash]
     runs-on: ubuntu-latest
     steps:
       - name: Setup build env
@@ -51,21 +48,21 @@ jobs:
         run: |
           export PATH="$(pwd)/clang/bin:$(pwd)/clang/aarch64-linux-gnu/bin:$(pwd)/clang/arm-linux-gnueabi/bin:$PATH"
           cd kernel
-          make ARCH=arm64 O=out CC=clang LD=ld.lld CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- vendor/${{ matrix.variants }}_defconfig
-          ./scripts/kconfig/merge_config.sh -m out/.config arch/arm64/configs/vendor/flash_lao_com-perf_defconfig
+          make ARCH=arm64 O=out CC=clang LD=ld.lld CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- vendor/flash_lao_com-perf_defconfig
+          cd out && ../scripts/kconfig/merge_config.sh -m .config ../arch/arm64/configs/vendor/aosp_flash_defconfig && cd ..
           yes "" | make ARCH=arm64 O=out CC=clang LD=ld.lld CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- oldconfig
           make -j$(nproc --all) ARCH=arm64 O=out CC=clang LD=ld.lld CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- 2>&1 | tee build.log
       
       - name: Upload build artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: kernel-${{ matrix.variants }}
+          name: kernel-aosp_flash
           path: kernel/out/arch/arm64/boot
 
       - name: Upload build log
         uses: actions/upload-artifact@v3
         with:
-          name: build-log-${{ matrix.variants }}
+          name: build-log-aosp_flash
           path: kernel/build.log
           
       - name: Setup tmate session for debugging
