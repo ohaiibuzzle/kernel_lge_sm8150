@@ -52,7 +52,7 @@ jobs:
           export PATH="$(pwd)/clang/bin:$(pwd)/clang/aarch64-linux-gnu/bin:$(pwd)/clang/arm-linux-gnueabi/bin:$PATH"
           cd kernel
           make ARCH=arm64 O=out CC=clang LD=ld.lld CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- vendor/${{ matrix.variants }}_defconfig
-          sed -i 's/CONFIG_CC_WERROR=y/CONFIG_CC_WERROR=n/g' out/.config
+          ./scripts/kconfig/merge_config.sh -m out/.config arch/arm64/configs/vendor/flash_lao_com-perf_defconfig
           yes "" | make ARCH=arm64 O=out CC=clang LD=ld.lld CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- oldconfig
           make -j$(nproc --all) ARCH=arm64 O=out CC=clang LD=ld.lld CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- 2>&1 | tee build.log
       
